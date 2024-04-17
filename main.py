@@ -4,42 +4,45 @@ import math
 import pygame
 import sys
 import time
+import heuristic 
 
 GUI_MODE = True
+h_obj = heuristic.Heuristic()
 
-def alphabeta_search(game, state):
-    """Search game to determine best action; use alpha-beta pruning.
-    As in [Figure 5.7], this version searches all the way to the leaves."""
+infinity = math.inf
 
-    player = state.to_move
-    infinity = math.inf
-    def max_value(state, alpha, beta):
-        if game.is_terminal(state):
-            return game.utility(state, player), None
-        v, move = -infinity, None
-        for a in game.actions(state):
-            v2, _ = min_value(game.result(state, a), alpha, beta)
+def alphabeta_search(copy_board, strategy, depth, alpha=-math.inf, beta = math.inf, MaximizingPlayer=True):
+    if depth == 0 or copy_board.is_game_over():
+        return strategy(board, False), None
+    if MaximizingPlayer:
+        # print(f"max_value called with depth: {depth}")
+        v, best = -infinity, None
+        for move in copy_board.legal_moves:
+            copy_board.push(move)
+            v2, _ = alphabeta_search(copy_board, strategy, depth-1, alpha, beta, False)
+            copy_board.pop()
             if v2 > v:
-                v, move = v2, a
+                # print(" max:", v)
+                v, best = v2, move
                 alpha = max(alpha, v)
             if v >= beta:
-                return v, move
-        return v, move
-
-    def min_value(state, alpha, beta):
-        if game.is_terminal(state):
-            return game.utility(state, player), None
-        v, move = +infinity, None
-        for a in game.actions(state):
-            v2, _ = max_value(game.result(state, a), alpha, beta)
+                return v, best
+        return v, best
+    else:
+        # print(f"min_value called with depth: {depth}")
+        v, best = +infinity, None
+        for move in copy_board.legal_moves:
+            copy_board.push(move)
+            v2, _ = alphabeta_search(copy_board, strategy, depth-1, alpha, beta, True)
+            copy_board.pop()
             if v2 < v:
-                v, move = v2, a
+                # print("    min: ", v2)
+                v, best = v2, move
                 beta = min(beta, v)
             if v <= alpha:
-                return v, move
-        return v, move
+                return v, best
+        return v, best
 
-    return max_value(state, -infinity, +infinity)
 
 # draw the board in gui mode
 def draw_board(screen, board):
@@ -61,7 +64,7 @@ def draw_pieces(screen, board):
                 img = pygame.image.load(piece_images[piece.symbol()])
                 img = pygame.transform.scale(img, PIECE_SIZE)
                 screen.blit(img, (c * SQUARE_SIZE, r * SQUARE_SIZE))
-board = chess.Board()
+board = chess.Board('rnbkqbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBKQBNR w KQkq - 0 1')
 if(GUI_MODE):
     piece_images = {
         'K': './pieces-basic-png/white-king.png',
@@ -140,7 +143,6 @@ def attempt_move(white_turn, selected_square, square):
         if(attempt_promotion(white_turn, piece, selected_square, square)):
             return True
         move = chess.Move(selected_square, square)
-        print(board.legal_moves)
         if move in board.legal_moves:
             board.push(move)
             return True
@@ -149,34 +151,42 @@ def attempt_move(white_turn, selected_square, square):
 running = True
 white_turn = True
 selected_square = None
-
+AI = True
+board.turn = chess.WHITE   
 while running:
-    if GUI_MODE:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.MOUSEBUTTONDOWN:
-                location = pygame.mouse.get_pos()
-                col = location[0] // SQUARE_SIZE
-                row = location[1] // SQUARE_SIZE
-                print(row, col)
-                square = chess.square(col,row)
-                if selected_square == None:
-                    if board.piece_at(square):
-                        selected_square = square
-                else:
-                    if(attempt_move(white_turn, selected_square, square)):
-                        print("valid_move")
-                        white_turn = not white_turn
-                        pygame.display.set_caption("WHITE TURN" if white_turn else "BLACK TURN")
-                        selected_square = None
+    if GUI_MODE and AI:
+        if not white_turn:
+            copy_board = board
+            v , move = alphabeta_search(copy_board, h_obj.count_pieces, 4)
+            board.push(move)
+            white_turn = not white_turn
+        else:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    # print(board.turn)
+                    # print(board.legal_moves)
+                    location = pygame.mouse.get_pos()
+                    col = location[0] // SQUARE_SIZE
+                    row = location[1] // SQUARE_SIZE
+                    print(row, col)
+                    square = chess.square(col,row)
+                    if selected_square == None:
+                        if board.piece_at(square):
+                            selected_square = square
                     else:
-                        print("try again")
-                        selected_square = None
-    
-        draw_board(screen, board)
-        draw_pieces(screen, board)
-        pygame.display.flip()
+                        if(attempt_move(white_turn, selected_square, square)):
+                            print("valid_move")
+                            white_turn = not white_turn
+                            selected_square = None
+                        else:
+                            print("try again")
+                            selected_square = None
+            pygame.display.set_caption("WHITE TURN" if white_turn else "BLACK TURN")
+            draw_board(screen, board)
+            draw_pieces(screen, board)
+            pygame.display.flip()
     else:
         print(board.unicode())
         time.sleep(10000)
